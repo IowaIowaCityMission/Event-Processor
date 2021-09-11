@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <style>
+      #records{
+        list-style-type: none;
+        margin-left: -30px;
+        height: 500px;
+        overflow-y: scroll;
+      }
+      #records li{
+        padding: 5px 0px;
+      }
+      #records li:nth-child(even){
+        background-color: #eeeeee;
+      }
+      #radio_group{
+        padding: 10px 0px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h3>Select records to add to the Blacklist</h3>
+    <form id="blacklist_form" onsubmit="handleSubmit()">
+      <ul id="records">
+        <label>Loading...</label>
+      </ul>
+      <div id="radio_group">
+        <label for="radio_group">Select Desired Blacklist:<br></label>
+
+        <!-- Feel free to change the values of these radio buttons to something more code friendly. Just placeholders for now. -->
+
+        <input type="radio" name="select_blacklist" id="radio_member" value="member">
+        <label for="radio_member">Member</label>
+
+        <input type="radio" name="select_blacklist" id="radio_missionary" value="missionary">
+        <label for="radio_missionary">Missionary</label>
+
+        <input type="radio" name="select_blacklist" id="radio_pbt" value="pbt">
+        <label for="radio_pbt">PBT</label>
+
+      </div>
+      <input type="submit" id="submit">
+    </form>
+  </body>
+
+  <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+  <script>
+    /* DOM navigation is super wierd here in Google App Script, so rather than pull my hair out trying to make it work,
+      I just decided to import JQuery */
+
+    // Runs at load time
+    $(function() {
+      google.script.run
+        .withSuccessHandler(showSidebarItems)
+        .withFailureHandler(onFailure)
+        .getSidebarItems(<?=sh_name?>);
+    });
+
+
+    /**
+     * Maps through the returned data and loads it into the element with the id 'records' 
+     */
+    function showSidebarItems(items) {
+      let list = $("#records");
+      list.empty(); // Clear out the Loading message
+
+      // You may consider changing this to a <table> instead of a <ul>
+      // Either way, it will now require css styling and maybe some more js to get a scrollable pane
+      // Also, line up the checkboxes so it isn't aids to select things quickly
+      items.forEach(item=>{
+        // This uses `` so you can interpolate the array values into the html template string
+        list.append($(`
+          <li>
+            <input type="checkbox" class="record" name="${item[1]}" value="${item[1]}">
+            <label for="${item[1]}">${item[0]}</label>
+          </li>`
+        ));
+      });
+    };
+
+
+    // Maybe improve later
+    function onFailure(error) {
+      var div = $('body');
+      div.empty();
+      div.innerHTML = "ERROR: " + error.message;
+    };
+
+
+    /**
+     * Send required information about selected records back to the server
+     */
+    function handleSubmit(){
+      // Prevent multiple server calls
+      let button = $("#submit");
+      button.prop('disabled', true);
+
+      // Grab all checked values into an array
+      let checked_values = []
+      $(".record:checkbox:checked").each(function() {
+        checked_values.push(this.value);
+      })
+
+      // Don't submit if nothing is selected
+      if(checked_values.length < 1){
+        $("body").append('<div>Please select at least 1 item</div>');
+        button.prop('disabled', false);
+        return;
+      }
+
+      // Debug
+      $("body").append(`<div>The values are ${checked_values} </div>`);
+    }
+
+  </script>
+</html>
