@@ -7,5 +7,5 @@ function archiveRecords(vals, event_date, page_name) {
   });
 
   const arc_sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Archive");
-  appendRecords(archive_vals, arc_sh);
+  appendValues(arc_sh, archive_vals);
 }

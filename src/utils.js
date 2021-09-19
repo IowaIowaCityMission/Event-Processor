@@ -18,69 +18,35 @@ function safeGetSheet(sh_name) {
 
 
 /**
- * Method to archive and remove records from a sheet based on values in a Set
- * For memory reasons, would reccomend chunking the opperation if raw source ever gets larger than around 6000 records
- * 
- * ! Takes sheet objects NOT sheet names !
- * ! Meant to be called from within another method that handles locking the sheet !
+ * Clears the passed in range and pastes new data into it
+ * @param {GoogleAppsScript.Spreadsheet.Range} rng
+ * @param {Array<Array>} vals
  */
-function filterSheet(src_sh, filter_set, target_col, options){
-
-  // Grab data chunk from raw sheet
-    const src_rng = src_sh.getRange(`A2:E${src_sh.getLastRow()}`);
-    const src_vals = src_rng.getValues();
-  
-    // Filter list and push items for archiving
-    let archive_vals = [];
-    let filtered_vals = [];
-    // const join_col = options?.join_column;
-    // const join_data = options?.join_data;
-    
-    filtered_vals = src_vals.reduce((acc, v) => {
-      if(filter_set.has(v[target_col])){
-        archive_vals.push(v.slice(0,4));
-      } else {
-        acc.push(v);
-      }
-      return acc;
-    }, []);
-
-    // If there is nothing to be filtered in the sheet
-    if(!archive_vals.length) return;
-
-    // Archive
-    const d = options?.event_date || "NOT PROVIDED";
-    archiveRecords(archive_vals, d, src_sh.getSheetName());
-    
-    // Paste remaining values back into raw sheet
-    const new_rng = src_sh.getRange(`A2:E${filtered_vals.length + 1}`);
-    src_rng.clear();
-    new_rng.setValues(filtered_vals);
+function setNewRangeValues(rng, vals){
+  const new_rng = rng.getSheet().getRange(rng.getRow(), rng.getColumn(), vals.length, vals[0].length);
+  rng.clear();
+  new_rng.setValues(vals);
+  return new_rng;
 }
 
 
 /**
- * Method to handle appending new records to a sheet
+ * Append new values to a sheet
  * 
- * Must pass in an array of dimensions NxM
- *    N being the number of records to append to the archive
- *    M being the number of columns in the sheet
- * 
- * ! Takes sheet objects NOT sheet names !
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sh
+ * @param {Array<Array>} vals
  */
-function appendRecords(records, sh) {
-  // Add in dimension validation later (if we want manual entry capabilities)
-
+function appendValues(sh, vals) {
   // Append the records to the sheet
-  const nxt_rng = sh.getRange(`${sh.getLastRow() + 1}:${sh.getLastRow() + records.length}`);
-  nxt_rng.setValues(records);
+  const rng = sh.getRange(sh.getLastRow() + 1, 1, vals.length, vals[0].length);
+  rng.setValues(vals);
+  return rng;
 }
 
 
 /**
- * Efficient method to flatten arrays
- * 
- * ! Mutates original array !
+ * Method to flatten deep arrays
+ * Mutates the original
  */
 const flatten = arr => {
 

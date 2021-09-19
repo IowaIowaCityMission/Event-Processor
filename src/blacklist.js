@@ -80,18 +80,3 @@
     // Unlock the spreadsheet
   };
   
-
-  /**
-   * Method to remove Blacklisted values from a raw data sheet.
-   */
-  function filterWithBlacklist(src_sheet, options={}, blk_sheet=SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Blacklist")) {
-
-    // Get full blacklist array and cast it to a set for O(1) lookups
-    let blk_values = blk_sheet.getRange(2,1,blk_sheet.getLastRow()-1,1).getValues();
-    blk_values = blk_values.reduce((a,b) => a.concat(b), []); // Flatten the array
-    const blk = new Set(blk_values);
-
-    // Need to add a filter-archive loop that will automatically assign a classification to the archived record.
-    filterSheet(src_sheet, blk, 0, options);
-  };
-  

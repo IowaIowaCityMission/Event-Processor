@@ -39,7 +39,7 @@ function manualArchive() {
       return
     }
     // filterSheet(app.getSheetByName(n), fset, 2, options);
-    filterWithBlacklist(app.getSheetByName(n), options);
+    // filterWithBlacklist(app.getSheetByName(n), options);
   })
 
 
