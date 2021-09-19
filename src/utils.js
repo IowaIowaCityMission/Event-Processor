@@ -1,10 +1,9 @@
 /**
- * Attempt to grab a sheet by name and verify it was successful
+ * Attempt to grab a sheet by name and alert user if unsuccessful
  */
 function safeGetSheet(sh_name) {
-  let sh;
   try {
-      sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sh_name);
+      var sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sh_name);
       if(!sh){
         SpreadsheetApp.getUi().alert(`"${sh_name}" is not a valid sheet name.`);
         return;
@@ -76,3 +75,24 @@ function appendRecords(records, sh) {
   const nxt_rng = sh.getRange(`${sh.getLastRow() + 1}:${sh.getLastRow() + records.length}`);
   nxt_rng.setValues(records);
 }
+
+
+/**
+ * Efficient method to flatten arrays
+ * 
+ * ! Mutates original array !
+ */
+const flatten = arr => {
+
+  if(!Array.isArray(arr)) return arr;
+
+  let i=0;
+  while (i < arr.length) {
+    if(Array.isArray(arr[i])){
+      arr.splice(i, 1, ...arr[i]);
+    } else {
+      i++;
+    }
+  }
+  return arr;
+};
