@@ -1,6 +1,3 @@
-
-
-
 function checkDuplicates() {
 
 
@@ -20,7 +17,7 @@ function checkDuplicates() {
 
   //Convert allNamesRaw to a one dimensional Array, assigned to the variable allNamesFlat
 
-    allNamesFlat = [].concat.apply([], allNamesRaw);
+    var allNamesFlat = [].concat.apply([], allNamesRaw);
 
   //Sort allNamesFlat into a new variable (sortedNames)
 
@@ -90,6 +87,10 @@ function checkDuplicates() {
 
   var indexes = [];
 
+  //Create an Array to hold all of the Data to be displayed.
+
+  var displayData = [];
+
   const duplicatesFilter = new Set(duplicates);
   duplicates = Array.from(duplicatesFilter);
   Logger.log(duplicates);
@@ -117,17 +118,43 @@ function checkDuplicates() {
         }
 
       }
-      //Mark each of the names via their indexes.
-      /* A 2 dimensional array can be sorted by a value in each sub-array, so at this step in the process all that needs to happen is creating an array 
-      using the index (col 1), the sheet(ex: 'IC'), the name (col 2), and the assignment (col 4). This array then needs to be pushed into another array
-      to create a 2 dimensional array with all of the data to be written to a table. */
+    
+      //For every value in the indexes array...
       for (n = 0; n < indexes.length; n++) {
-        sheets[i].getRange(indexes[n] + 2, 1, 1, 7).setBackground("yellow");
+
+      //Get the values for cells 1-4 of the Duplicate name (due to some loop shenanigans, the index values are off by two. This might be fixable?)
+      //Place the values in a new array (collectData) and immediately make that array 1 dimensional.
+
+       var collectData = sheets[i].getRange(indexes[n] + 2, 1, 1, 4).getValues();
+       collectData = [].concat.apply([], collectData);
+
+      //Get the name of the sheet the index is on, as well as the index itself, and push both of those values to the collectData array.
+       collectData.push(sheets[i].getName());
+       collectData.push(indexes[n] + 2);
+
+       //Take the whole collectData array and push it to the displayData array. This creates a 2 dimensional array with all of the information that will
+       //need to be displayed.
+       displayData.push(collectData);
       }
-   
       //Empty the indexes array so the data is clean for the next page.
       indexes.splice(0,indexes.length);
    }
+    //A Quick function to sort a 2 dimensional array alphabetically.
+    function alphabetical(a, b) {
+      var A = a[0];
+      var B = b[0].toLowerCase(); 
+     
+      A = A.toLowerCase();
+      B = B.toLowerCase();
+     
+      if (A < B) return -1;
+      if (A > B) return 1;
+      return 0;
+    }
+
+    //Sort the displayData array alphabetically by name, using the above 'alphabetical' function.
+    displayData.sort(alphabetical);
+    Logger.log(displayData);
 
  }
 
