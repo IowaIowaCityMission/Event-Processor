@@ -23,3 +23,22 @@ function archiveRecords(vals, event_date, page_name, ordered_indexes=[]) {
     const arc_sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Archive");
     appendValues(arc_sh, vals);
 }
+
+
+/**
+ * Archives all data found in the passed sheets
+ * 
+ * @param {(GoogleAppsScript.Spreadsheet.Sheet|Array<GoogleAppsScript.Spreadsheet.Sheet>)} src
+ */
+function archiveSheets(src, event_date){
+
+     if(!Array.isArray(src)){
+        src = [src];
+    };
+
+    src.forEach(sh => {
+        const rng = sh.getRange(2,1,sh.getLastRow()-1, sh.getLastColumn());
+        archiveRecords(rng.getValues(), event_date, sh.getName(), [0,1,2,3]);
+        rng.clear();
+    });
+}

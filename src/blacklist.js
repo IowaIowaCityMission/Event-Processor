@@ -1,82 +1,187 @@
 /**
- * Start the process of selecting rows from a set of raw data and moving them to the blacklist
+ * Method to archive all records from the event data where the Facebook account is in the blacklist
+ * 
+ * Currently, only 1 BlacklistSet will be loaded in memory at a time
+ * This means that if the fallback filter set is needed, it will expend time swapping out
+ * Arrays of sheets reduce unneccessary getBlacklistSet() calls by continuing the loop instead of rerunning the whole method
+ * 
+ * @param {(GoogleAppsScript.Spreadsheet.Sheet|Array<GoogleAppsScript.Spreadsheet.Sheet>)} src
+ * @param {{
+ *      blk_sh?: GoogleAppsScript.Spreadsheet.Sheet,
+ *      primary_col?: String,
+ *      fallback_col?: String,
+ *      info_col?: String,
+ *      event_date?: (Date|String)
+ * }} options
  */
- function startBlacklistUpdater() {
-    const ui = SpreadsheetApp.getUi();
-  
-    // Pick the Sheet to pull data from
-    let sh;
-    const res = ui.prompt("Select Sheet", "Type the name of the sheet you would like to pull data from", ui.ButtonSet.OK_CANCEL);
-    if(res.getSelectedButton() == ui.Button.OK) {
-      sh = safeGetSheet(res.getResponseText());
-      if(!sh) return;
-    } else {
-      return;
-    };
-  
-    // Make sure there is data beneath the headers before continuing
-    if(sh.getLastRow() <= 1) {
-      ui.alert("Selected Sheet has no data.");
-      return;
+function filterWithBlacklist(src, options={}) {
+
+    // Parse options
+    const blk_sh = options?.blk_sh || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Blacklist");
+    // The columns of the blacklist sheet that contain the data for the primary and fallback filters
+    const primary_col = options?.primary_col || "B"; 
+    const fallback_col = options?.fallback_col || "A";
+    const info_col = options?.info_col || "C" // THe column with the classification info
+    const event_date = options?.event_date || "Not Provided";
+
+    // Set up blacklist object
+    const info = flatten(blk_sh.getRange(`${info_col}2:${blk_sh.getLastRow()}`).getValues()); // Classification info for the whole blacklist
+    let blk = getBlacklistSet(blk_sh, primary_col, info);
+
+    // If only a single sheet was passed, place it in an array before continuing
+    if(!Array.isArray(src)){
+        src = [src];
     }
-  
-  
-    // Serve HTML form
-    let html = HtmlService.createTemplateFromFile("test.html");
-    // Tee only way to pass data down is to explicitly set env vars
-    // html.data_map = data_map;
-    
-    let rendered_html = html.evaluate()
-      .setSandboxMode(HtmlService.SandboxMode.IFRAME)
-      .setTitle("Blacklist Selector");
-    
-    ui.showSidebar(rendered_html);
-  }
-  
-  
-  /**
-   * Method to be called by the Blacklist Update sidebar
-   * Retrieves the data from the sheet and maps it to the correct array form
-   * 
-   * ! Does not validate a sheet name !
-   */
-  function getSidebarItems(sh_name) {
-    const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sh_name);
-  
-    const vals = sh.getRange(2,1, sh.getLastRow()-1, 2).getValues();
-    let data_map = [];
-    vals.forEach((v, index) => {
-      data_map.push([
-        v[0],
-        index + 2 // Accounts for the way the index was thrown off
-      ]);
+
+    // Loop through each sheet, filter it, and archive the removed values
+    src.forEach(sh => {
+        let {removed_vals, empty_vals} = filterSheetValues(sh, blk, 1);
+        
+        // Handle a sceond filtering only if neccessary
+        if(empty_vals.length){
+            // Swap out the filter_set so we don't fill up memory
+            blk = getBlacklistSet(blk_sh, fallback_col, info);
+            empty_vals = empty_vals.reduce((acc, val) => {
+                if(blk.hasOwnProperty(val[0])){
+                    val.push(blk[val[0]]);
+                    removed_vals.push(val);
+                } else {
+                    acc.push(val);
+                }
+                return acc;
+            }, []);
+
+            // Write empty_vals back into the sheet
+            if(empty_vals.length){
+              appendValues(sh, empty_vals);
+            }
+            // Swap the filter_set back
+            blk = getBlacklistSet(blk_sh, primary_col, info);
+        };
+        
+        // Archive all the removed_vals
+        if(removed_vals.length){
+          archiveRecords(removed_vals, event_date, sh.getSheetName(), [0,1,2,(removed_vals[0].length-1)]);
+        }
     });
-    Logger.log(data_map);
-    return data_map;
-  }
-  
-  
-  /**
-   * Method to pull rows from a raw data sheet and add the name to the blacklist.
-   * 
-   * Requires an array of row numbers, the sheet name of the raw source, and the sheet name of the blacklist
-   */
-  function updateBlacklist(row_nums, src_name, blk_name, classification="Memeber"){
-  
-    // Verify Sheets Exist
-    let src_sh = safeGetSheet(src_name);
-    let blk_sh = safeGetSheet(blk_name);
-    // Throw an error so that the row_nums can be collected by the withFailureHandler() so we don't have to click the checkboxes again.
-    if((!src_sh)||(!blk_sh)) throw Error("There was an error opening one of the sheets.");
-  
-    // Lock the Spreadsheet
-  
-    // Grab source data
-  
-    // Add data to blacklist
-  
-    // Remove records from source sheet
-  
-    // Unlock the spreadsheet
-  };
-  
+
+};
+
+
+/**
+ * Build a filter set from a column in the blacklist sheet
+ * 
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} blk_sh
+ * @param {String} key_col
+ * @param {Array} data
+ */
+function getBlacklistSet(blk_sh, key_col, data=[]) {
+    const filter_data = blk_sh.getRange(`${key_col}2:${blk_sh.getLastRow()}`).getValues();
+    let blk = {};
+    let i=0;
+    while(filter_data.length){
+        let key = filter_data.shift()[0];
+        if(key){
+            blk[`${key}`] = data[i] || "";
+        }
+        i++;
+    };
+    return blk;
+};
+
+
+/**
+ * Remove rows from a sheet based on values in a Set
+ * 
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} src_sh
+ * @param {Object} filter_set
+ * @param {Number} target_col
+ * @param {{
+ *      src_vals?: Array,
+ *      removed_vals?: Array,
+ *      src_range?: GoogleAppsScript.Spreadsheet.Range
+ * }} options
+ * 
+ * @returns {{
+ *      removed_vals: Array,
+ *      empty_vals: Array
+ * }}
+ */
+function filterSheetValues(src_sh, filter_set, target_col, options={}) {
+
+    // Parse options
+    const src_range = options?.src_range || src_sh.getRange(`A2:${src_sh.getLastRow()}`); // Assume pressence of a header row
+    let src_vals = options?.src_vals || src_range.getValues();
+    let removed_vals = options?.removed_vals || [];
+    let empty_vals = []; // Rows where the target_col is blank
+
+    // Filter rows out of the src_vals based on if the value in the target_col is also in the filter_set
+    src_vals = src_vals.reduce((acc, val) => {
+        if(val[target_col] === ""){
+            empty_vals.push(val);
+        } else if(filter_set.hasOwnProperty(val[target_col])){
+            // Append info from the filter_set to the value
+            val.push(filter_set[val[target_col]]);
+            removed_vals.push(val);
+        } else {
+            acc.push(val);
+        }
+        return acc;
+    }, []);
+
+    // Rewrite the src_range with the unremoved values
+    setNewRangeValues(src_range, src_vals);
+
+    // These are all returned for chaining different filtering operations on the same data set
+    return {"removed_vals":removed_vals, "empty_vals":empty_vals};
+}
+
+
+/**
+ * Scans through the passed pages and updates the blacklist with
+ * 
+ * @param {(GoogleAppsScript.Spreadsheet.Sheet|Array<GoogleAppsScript.Spreadsheet.Sheet>)} src
+ * @param {Array<String>} classifications
+ * @param {{
+ *      blk_sh?: GoogleAppsScript.Spreadsheet.Sheet,
+ *      primary_col_str?: String,
+ *      primary_col?: Number,
+ *      class_col?: Number
+ * }} options
+ */
+function updateBlacklist(src, classifications, options={}) {
+    const blk_sh = options?.blk_sh || SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Blacklist");
+    const primary_col_str = options?.primary_col_str || "B";
+    const primary_col = options?.primary_col || 1; //The 0-indexed col refrence for the primary key
+    const class_col = options?.class_col || 3; //The 0-indexed col refrence for classification data
+    const classes = new Set(classifications);
+
+    let blk = getBlacklistSet(blk_sh, primary_col_str);
+    let new_blk = {};
+    let counter = 0;
+
+    // If only a single sheet was passed, place it in an array before continuing
+    if(!Array.isArray(src)){
+        src = [src];
+    };
+
+    src.forEach(sh => {
+        const data = sh.getRange(2, 1, sh.getLastRow()-1, class_col+1).getValues();
+        
+        data.forEach(row => {
+            if(classes.has(row[class_col])){
+                if(!row[primary_col] || row[primary_col]=='#'){
+                    new_blk[`${counter}`] = [row[0], '', row[class_col]];
+                    counter++;
+                }
+                else if(!(blk.hasOwnProperty(row[primary_col])||new_blk.hasOwnProperty(row[primary_col]))){
+                    new_blk[`${row[primary_col]}`] = [row[0], row[primary_col], row[class_col]];
+                };
+            };
+        });
+    });
+
+    if(Object.keys(new_blk).length){
+        appendValues(blk_sh, Object.values(new_blk));
+    };
+};
